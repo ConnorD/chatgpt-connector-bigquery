@@ -1,19 +1,20 @@
-from google.cloud import bigquery
-from google.oauth2 import service_account
 import logging
-from mcp.server.models import InitializationOptions
-import mcp.types as types
-from mcp.server import NotificationOptions, Server
-import mcp.server.stdio
 from typing import Any, Optional
 
+import mcp.server.stdio
+import mcp.types as types
+from google.cloud import bigquery
+from google.oauth2 import service_account
+from mcp.server import NotificationOptions, Server
+from mcp.server.models import InitializationOptions
+
 # Set up logging to both stdout and file
-logger = logging.getLogger('mcp_bigquery_server')
+logger = logging.getLogger("mcp_bigquery_server")
 handler_stdout = logging.StreamHandler()
-handler_file = logging.FileHandler('/tmp/mcp_bigquery_server.log')
+handler_file = logging.FileHandler("/tmp/mcp_bigquery_server.log")
 
 # Set format for both handlers
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 handler_stdout.setFormatter(formatter)
 handler_file.setFormatter(formatter)
 
@@ -26,15 +27,24 @@ logger.setLevel(logging.DEBUG)
 
 logger.info("Starting MCP BigQuery Server")
 
+
 class BigQueryDatabase:
-    def __init__(self, project: str, location: str, key_file: Optional[str], datasets_filter: list[str]):
+    def __init__(
+        self,
+        project: str,
+        location: str,
+        key_file: Optional[str],
+        datasets_filter: list[str],
+    ):
         """Initialize a BigQuery database client"""
-        logger.info(f"Initializing BigQuery client for project: {project}, location: {location}, key_file: {key_file}")
+        logger.info(
+            f"Initializing BigQuery client for project: {project}, location: {location}, key_file: {key_file}"
+        )
         if not project:
             raise ValueError("Project is required")
         if not location:
             raise ValueError("Location is required")
-        
+
         credentials: service_account.Credentials | None = None
         if key_file:
             try:
@@ -47,18 +57,24 @@ class BigQueryDatabase:
                 logger.error(f"Error loading service account credentials: {e}")
                 raise ValueError(f"Invalid key file: {e}")
 
-        self.client = bigquery.Client(credentials=credentials, project=project, location=location)
+        self.client = bigquery.Client(
+            credentials=credentials, project=project, location=location
+        )
         self.datasets_filter = datasets_filter
 
-    def execute_query(self, query: str, params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    def execute_query(
+        self, query: str, params: dict[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
         """Execute a SQL query and return results as a list of dictionaries"""
         logger.debug(f"Executing query: {query}")
         try:
             if params:
-                job = self.client.query(query, job_config=bigquery.QueryJobConfig(query_parameters=params))
+                job = self.client.query(
+                    query, job_config=bigquery.QueryJobConfig(query_parameters=params)
+                )
             else:
                 job = self.client.query(query)
-                
+
             results = job.result()
             rows = [dict(row.items()) for row in results]
             logger.debug(f"Query returned {len(rows)} rows")
@@ -66,13 +82,15 @@ class BigQueryDatabase:
         except Exception as e:
             logger.error(f"Database error executing query: {e}")
             raise
-    
+
     def list_tables(self) -> list[str]:
         """List all tables in the BigQuery database"""
         logger.debug("Listing all tables")
 
         if self.datasets_filter:
-            datasets = [self.client.dataset(dataset) for dataset in self.datasets_filter]
+            datasets = [
+                self.client.dataset(dataset) for dataset in self.datasets_filter
+            ]
         else:
             datasets = list(self.client.list_datasets())
 
@@ -81,9 +99,9 @@ class BigQueryDatabase:
         tables = []
         for dataset in datasets:
             dataset_tables = self.client.list_tables(dataset.dataset_id)
-            tables.extend([
-                f"{dataset.dataset_id}.{table.table_id}" for table in dataset_tables
-            ])
+            tables.extend(
+                [f"{dataset.dataset_id}.{table.table_id}" for table in dataset_tables]
+            )
 
         logger.debug(f"Found {len(tables)} tables")
         return tables
@@ -104,12 +122,20 @@ class BigQueryDatabase:
             FROM {dataset_id}.INFORMATION_SCHEMA.TABLES
             WHERE table_name = @table_name;
         """
-        return self.execute_query(query, params=[
-            bigquery.ScalarQueryParameter("table_name", "STRING", table_id),
-        ])
+        return self.execute_query(
+            query,
+            params=[  # type: ignore[arg-type]
+                bigquery.ScalarQueryParameter("table_name", "STRING", table_id),
+            ],
+        )
 
-async def main(project: str, location: str, key_file: Optional[str], datasets_filter: list[str]):
-    logger.info(f"Starting BigQuery MCP Server with project: {project} and location: {location}")
+
+async def main(
+    project: str, location: str, key_file: Optional[str], datasets_filter: list[str]
+):
+    logger.info(
+        f"Starting BigQuery MCP Server with project: {project} and location: {location}"
+    )
 
     db = BigQueryDatabase(project, location, key_file, datasets_filter)
     server = Server("bigquery-manager")
@@ -127,7 +153,10 @@ async def main(project: str, location: str, key_file: Optional[str], datasets_fi
                 inputSchema={
                     "type": "object",
                     "properties": {
-                        "query": {"type": "string", "description": "SELECT SQL query to execute using BigQuery dialect"},
+                        "query": {
+                            "type": "string",
+                            "description": "SELECT SQL query to execute using BigQuery dialect",
+                        },
                     },
                     "required": ["query"],
                 },
@@ -146,7 +175,10 @@ async def main(project: str, location: str, key_file: Optional[str], datasets_fi
                 inputSchema={
                     "type": "object",
                     "properties": {
-                        "table_name": {"type": "string", "description": "Name of the table to describe (e.g. my_dataset.my_table)"},
+                        "table_name": {
+                            "type": "string",
+                            "description": "Name of the table to describe (e.g. my_dataset.my_table)",
+                        },
                     },
                     "required": ["table_name"],
                 },
@@ -168,11 +200,11 @@ async def main(project: str, location: str, key_file: Optional[str], datasets_fi
             elif name == "describe-table":
                 if not arguments or "table_name" not in arguments:
                     raise ValueError("Missing table_name argument")
-                results = db.describe_table(arguments["table_name"])
+                results = db.describe_table(arguments["table_name"])  # type: ignore[assignment]
                 return [types.TextContent(type="text", text=str(results))]
 
             if name == "execute-query":
-                results = db.execute_query(arguments["query"])
+                results = db.execute_query(arguments["query"])  # type: ignore[assignment,index]
                 return [types.TextContent(type="text", text=str(results))]
 
             else:

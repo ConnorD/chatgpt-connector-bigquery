@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  bigquery-http:
+    build:
+      context: .
+    ports:
+      - "8000:8000"
+    environment:
+      # Required
+      BIGQUERY_PROJECT: ${BIGQUERY_PROJECT}
+      BIGQUERY_LOCATION: ${BIGQUERY_LOCATION}
+      MY_API_KEY: ${MY_API_KEY}
+
+      # Optional
+      BIGQUERY_KEY_FILE: ${BIGQUERY_KEY_FILE:-}
+      BIGQUERY_DATASETS: ${BIGQUERY_DATASETS:-}
+
+    # If using a service account key file
+    volumes:
+      - ${BIGQUERY_KEY_FILE:-/dev/null}:/app/key.json:ro
+
+    restart: unless-stopped
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

@@ -24,8 +24,7 @@ This repository extends the original MCP server with:
 # Copy example environment file
 cp .env.example .env
 
-# Edit .env with your configuration
-nano .env
+# Edit .env with your configuration...
 ```
 
 Required variables:
@@ -88,31 +87,133 @@ Once the server is running, visit:
 
 ## ChatGPT Integration
 
-See **[CHATGPT_SETUP.md](./CHATGPT_SETUP.md)** for detailed instructions on:
-- Setting up HTTPS (required for ChatGPT)
-- Configuring ChatGPT custom actions
-- Deploying to production
-- Troubleshooting common issues
+### Prerequisites
 
-### Quick ChatGPT Setup
+- ChatGPT Plus or Enterprise account
+- Google Cloud Platform account with BigQuery access
+- HTTPS endpoint, required by ChatGPT (you may use Cloudflare or ngrok to tunnel to your local server)
 
-1. **Deploy your API** with HTTPS (use Cloudflare Tunnel, ngrok, or a cloud provider)
+### Step-by-Step Setup
 
-2. **Get the OpenAPI spec** from `https://your-domain.com/openapi.json`
+#### 1. Deploy Your API with HTTPS
 
-3. **In ChatGPT**:
-   - Create a new GPT or edit existing
-   - Add a new Action
-   - Paste the OpenAPI spec
-   - Configure authentication:
-     - Type: API Key
-     - Auth Type: Bearer
-     - API Key: `your-secret-api-key`
+ChatGPT **requires HTTPS**. Choose one of these deployment options:
 
-4. **Test with prompts** like:
-   - "List all BigQuery tables"
-   - "Query the users table and show me the first 10 rows"
-   - "What's the schema of the analytics.events table?"
+**Option A: Cloudflare Tunnel (Easiest)**
+```bash
+# Install cloudflared
+# Start the server locally
+uv run mcp-server-bigquery-http
+
+# In another terminal, create tunnel
+cloudflared tunnel create bigquery-api
+cloudflared tunnel run bigquery-api
+```
+
+**Option B: Cloud Run (Production)**
+```bash
+# Build and push to GCR
+gcloud builds submit --tag gcr.io/PROJECT_ID/bigquery-chatgpt
+
+# Deploy to Cloud Run
+gcloud run deploy bigquery-chatgpt \
+  --image gcr.io/PROJECT_ID/bigquery-chatgpt \
+  --platform managed \
+  --region us-central1 \
+  --allow-unauthenticated \
+  --set-env-vars BIGQUERY_PROJECT=PROJECT_ID,BIGQUERY_LOCATION=US,MY_API_KEY=SECRET
+```
+
+**Option C: Other Options**
+- ngrok for quick testing
+- AWS ALB/ELB with ACM certificate
+- nginx reverse proxy with Let's Encrypt
+- Any PaaS with automatic HTTPS (Heroku, Render, etc.)
+
+#### 2. Get OpenAPI Specification
+
+Once deployed with HTTPS, visit:
+- **OpenAPI JSON**: `https://your-domain.com/openapi.json`
+- **Swagger UI**: `https://your-domain.com/docs` (interactive testing)
+
+The server auto-generates the OpenAPI spec from your running API.
+
+#### 3. Configure ChatGPT Custom Action
+
+1. **Open ChatGPT** and click your profile icon
+2. Go to **Settings** → **Beta Features** → Enable **"Actions"**
+3. **Create a new GPT** or edit an existing one
+4. Click **Configure** → **Actions** → **"Create new action"**
+5. **In the Schema section**, paste the OpenAPI specification from `/openapi.json`
+6. **In the Authentication section**:
+   - Select **"API Key"**
+   - Choose **"Bearer"**
+   - Enter your `MY_API_KEY` value
+7. Click **"Save"**
+
+#### 4. Test Your Integration
+
+Try these prompts in ChatGPT:
+
+- "List all available BigQuery tables"
+- "Describe the schema of dataset.table_name"
+- "Query the first 10 rows from dataset.users"
+- "Show me the total count of records in analytics.events"
+
+### Security for ChatGPT Integration
+
+**Critical Security Considerations:**
+
+1. **API Key Management**
+   - Generate strong keys: `openssl rand -hex 32`
+   - Never commit keys to version control
+   - Use different keys for dev/prod
+   - Rotate keys regularly
+
+2. **Network Security**
+   - **Always use HTTPS** in production (ChatGPT requirement)
+   - Implement rate limiting to prevent abuse
+   - Use VPC/firewall rules to restrict access
+   - Consider IP allowlisting for additional security
+
+3. **BigQuery Access Control**
+   - Use service accounts with **minimum required permissions**
+   - Enable BigQuery audit logs for query monitoring
+   - Set up query cost limits to prevent runaway costs
+   - Review executed queries regularly
+
+4. **Query Safety**
+   - Queries are executed directly - ensure proper BigQuery IAM
+   - Consider implementing query validation/sanitization
+   - Set reasonable query timeouts
+   - Monitor for suspicious patterns
+
+### CORS Configuration
+
+The server is pre-configured with CORS for ChatGPT origins:
+- `https://chat.openai.com`
+- `https://chatgpt.com`
+
+If you need to add additional origins, modify the `http_server.py` configuration.
+
+### Troubleshooting ChatGPT Connection
+
+**"ChatGPT can't connect to my API"**
+- ✅ Verify API is accessible via HTTPS (not HTTP)
+- ✅ Test endpoints directly with curl first
+- ✅ Check CORS allows ChatGPT origins
+- ✅ Review server logs for authentication errors
+- ✅ Ensure API key matches exactly (no extra spaces)
+
+**"Invalid API key" errors**
+- ✅ Check `Authorization` header format: `Bearer YOUR_KEY`
+- ✅ Verify `MY_API_KEY` environment variable is set correctly
+- ✅ Ensure the key in ChatGPT matches your server configuration
+
+**"Database not initialized" errors**
+- ✅ Ensure `BIGQUERY_PROJECT` and `BIGQUERY_LOCATION` are set
+- ✅ Check BigQuery credentials are valid
+- ✅ Verify service account has proper permissions
 
 ## Docker Deployment
 
@@ -136,7 +237,7 @@ docker-compose down
 ### Using Docker directly
 
 ```bash
-docker build -f Dockerfile.http -t bigquery-chatgpt .
+docker build -t bigquery-chatgpt .
 
 docker run -d \
   -p 8000:8000 \
@@ -157,8 +258,6 @@ docker run -d \
 | `/tables` | GET | List all available tables | Yes |
 | `/table/describe` | POST | Get table schema | Yes |
 | `/query` | POST | Execute SQL query | Yes |
-
-See **[README_HTTP.md](./README_HTTP.md)** for complete API documentation.
 
 ## Architecture
 
@@ -234,12 +333,6 @@ Both MCP and HTTP modes support the same configuration:
    - Set up query cost limits
    - Review queries regularly
 
-## Documentation
-
-- **[CHATGPT_SETUP.md](./CHATGPT_SETUP.md)** - Complete ChatGPT integration guide
-- **[README_HTTP.md](./README_HTTP.md)** - Detailed HTTP API documentation
-- **[Original MCP Server](https://github.com/LucasHild/mcp-server-bigquery)** - Base MCP implementation
-
 ## Development
 
 ### Running Tests
@@ -261,10 +354,6 @@ uv run ruff format .
 # Lint code
 uv run ruff check .
 ```
-
-## License
-
-See [LICENSE](./LICENSE) file.
 
 ## Contributing
 
