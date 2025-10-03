@@ -37,7 +37,6 @@ if "OPENAPI_SERVERS" in os.environ:
         logger.error(f"Failed to parse OPENAPI_SERVERS environment variable: {e}")
 
 
-# Request/Response Models
 class QueryRequest(BaseModel):
     query: str = Field(..., description="SQL query to execute using BigQuery dialect")
 
@@ -72,7 +71,6 @@ class TableSchemaResponse(BaseModel):
     error: Optional[str] = None
 
 
-# Initialize FastAPI app
 app = FastAPI(
     title="BigQuery API for ChatGPT",
     description="REST API for executing BigQuery operations through ChatGPT custom actions",
@@ -81,7 +79,6 @@ app = FastAPI(
     openapi_url="/openapi.json",
 )
 
-# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["https://chat.openai.com", "https://chatgpt.com"],
@@ -91,7 +88,6 @@ app.add_middleware(
 )
 
 
-# Custom OpenAPI schema to inject servers
 def custom_openapi():
     if app.openapi_schema:
         return app.openapi_schema
@@ -109,7 +105,6 @@ def custom_openapi():
 
 app.openapi = custom_openapi
 
-# Global database instance
 db: Optional[BigQueryDatabase] = None
 
 
