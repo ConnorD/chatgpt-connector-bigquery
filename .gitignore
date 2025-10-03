@@ -11,3 +11,8 @@ wheels/
 
 # IJ files
 .idea
+
+# Environment and secrets
+.env
+*.json
+!pyproject.json

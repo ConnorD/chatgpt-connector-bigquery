@@ -7,6 +7,9 @@ requires-python = ">=3.13"
 dependencies = [
  "google-cloud-bigquery>=3.27.0",
  "mcp>=1.0.0",
+ "fastapi>=0.115.0",
+ "uvicorn[standard]>=0.32.0",
+ "pydantic>=2.0.0",
 ]
 [[project.authors]]
 name = "Lucas Hild"
@@ -18,3 +21,4 @@ build-backend = "hatchling.build"
 
 [project.scripts]
 mcp-server-bigquery = "mcp_server_bigquery:main"
+mcp-server-bigquery-http = "mcp_server_bigquery.http_server:main"
